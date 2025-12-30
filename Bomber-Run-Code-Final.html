@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>24x24 Board Game</title>
+
 <style>
   body {
     background: #1e1e1e;
@@ -11,6 +12,7 @@
     display: flex;
     justify-content: center;
     margin-top: 20px;
+    touch-action: none;
   }
 
   #container {
@@ -72,8 +74,13 @@ let offsetX = 0;
 let offsetY = 0;
 let dragged = false;
 
-/* ---------- SVG SHAPES ---------- */
+/* ---------- TOUCH HELPER ---------- */
+function getTouchPos(e) {
+  const t = e.touches ? e.touches[0] : e.changedTouches[0];
+  return { x: t.clientX, y: t.clientY };
+}
 
+/* ---------- SVG SHAPES ---------- */
 const shapes = {
   command: `
     <svg viewBox="0 0 100 100">
@@ -87,7 +94,6 @@ const shapes = {
       <rect x="45" y="10" width="10" height="70"/>
       <rect x="20" y="45" width="60" height="10"/>
       <rect x="15" y="50" width="70" height="6"/>
-      <!-- tail wings -->
       <rect x="30" y="80" width="40" height="6"/>
     </svg>
   `,
@@ -97,49 +103,69 @@ const shapes = {
       <polygon points="10,50 45,45 45,55"/>
       <polygon points="90,50 55,45 55,55"/>
       <polygon points="45,15 55,15 50,5"/>
-      <!-- tail wings -->
       <rect x="35" y="75" width="30" height="5"/>
     </svg>
   `
 };
 
 /* ---------- TOKEN CREATION ---------- */
-
 function createToken(type, color, col, row) {
   const token = document.createElement("div");
   token.className = `token ${color}`;
   token.innerHTML = shapes[type];
-  token.dataset.rotation = 0;
 
+  // Size
   const size = type === "fighter" ? GRID * 0.75 : GRID;
   token.style.width = `${size}px`;
   token.style.height = `${size}px`;
 
+  // Initial placement (center of square)
   token.style.left = `${col * GRID + GRID / 2 - size / 2}px`;
   token.style.top = `${row * GRID + GRID / 2 - size / 2}px`;
 
-  token.addEventListener("mousedown", e => {
-    activeToken = token;
-    offsetX = e.offsetX;
-    offsetY = e.offsetY;
-    dragged = false;
-    token.style.cursor = "grabbing";
-  });
+  // Initial rotation (RED fighters & bombers face down)
+  let initialRotation = 0;
+  if (color === "red" && (type === "fighter" || type === "bomber")) {
+    initialRotation = 180;
+  }
+  token.dataset.rotation = initialRotation;
+  token.style.transform = `rotate(${initialRotation}deg)`;
+
+  token.addEventListener("mousedown", startDrag);
+  token.addEventListener("touchstart", startDrag, { passive: false });
 
   token.addEventListener("click", () => {
-    if (!dragged) {
-      let r = parseInt(token.dataset.rotation);
-      r = (r + 45) % 360;
-      token.dataset.rotation = r;
-      token.style.transform = `rotate(${r}deg)`;
-    }
+    if (!dragged) rotateToken(token);
   });
 
   board.appendChild(token);
+
+  function startDrag(e) {
+    e.preventDefault();
+    activeToken = token;
+    dragged = false;
+
+    const rect = token.getBoundingClientRect();
+    if (e.touches) {
+      offsetX = e.touches[0].clientX - rect.left;
+      offsetY = e.touches[0].clientY - rect.top;
+    } else {
+      offsetX = e.offsetX;
+      offsetY = e.offsetY;
+    }
+
+    token.style.cursor = "grabbing";
+  }
 }
 
-/* ---------- SIDES ---------- */
+function rotateToken(token) {
+  let r = parseInt(token.dataset.rotation);
+  r = (r + 45) % 360;
+  token.dataset.rotation = r;
+  token.style.transform = `rotate(${r}deg)`;
+}
 
+/* ---------- SETUP SIDES ---------- */
 function setupSide(color, startRow) {
   createToken("command", color, 11, startRow);
   createToken("bomber", color, 10, startRow + 2);
@@ -159,8 +185,7 @@ setupSide("red", 1);
 setupSide("blue", 18);
 
 /* ---------- GRID LABELS ---------- */
-
-// Alphabetical (A–X) bottom to top
+// Left A–X
 for (let i = 0; i < 24; i++) {
   const label = document.createElement("div");
   label.className = "label";
@@ -170,7 +195,7 @@ for (let i = 0; i < 24; i++) {
   container.appendChild(label);
 }
 
-// Numbers bottom
+// Bottom 1–24
 for (let i = 0; i < 24; i++) {
   const label = document.createElement("div");
   label.className = "label";
@@ -180,28 +205,36 @@ for (let i = 0; i < 24; i++) {
   container.appendChild(label);
 }
 
-// Numbers top
+// Top 1–24 (above board)
 for (let i = 0; i < 24; i++) {
   const label = document.createElement("div");
   label.className = "label";
   label.textContent = i + 1;
   label.style.left = `${40 + i * GRID + GRID / 2 - 6}px`;
-  label.style.top = "0px";   // moved above the board
+  label.style.top = "0px";
   container.appendChild(label);
 }
 
-/* ---------- DRAG & SNAP ---------- */
+/* ---------- DRAG & SNAP (MOUSE + TOUCH) ---------- */
+document.addEventListener("mousemove", moveDrag);
+document.addEventListener("touchmove", moveDrag, { passive: false });
 
-document.addEventListener("mousemove", e => {
+function moveDrag(e) {
   if (!activeToken) return;
+  e.preventDefault();
   dragged = true;
 
   const rect = board.getBoundingClientRect();
-  activeToken.style.left = `${e.clientX - rect.left - offsetX}px`;
-  activeToken.style.top = `${e.clientY - rect.top - offsetY}px`;
-});
+  const pos = e.touches ? getTouchPos(e) : e;
 
-document.addEventListener("mouseup", () => {
+  activeToken.style.left = `${pos.x - rect.left - offsetX}px`;
+  activeToken.style.top = `${pos.y - rect.top - offsetY}px`;
+}
+
+document.addEventListener("mouseup", endDrag);
+document.addEventListener("touchend", endDrag);
+
+function endDrag() {
   if (!activeToken) return;
 
   const size = activeToken.offsetWidth;
@@ -214,11 +247,10 @@ document.addEventListener("mouseup", () => {
   activeToken.style.left = `${col * GRID + GRID / 2 - size / 2}px`;
   activeToken.style.top = `${row * GRID + GRID / 2 - size / 2}px`;
   activeToken.style.cursor = "grab";
+
   activeToken = null;
-});
+}
 </script>
 
 </body>
 </html>
-
-
