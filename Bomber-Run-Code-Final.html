@@ -73,6 +73,8 @@ let activeToken = null;
 let offsetX = 0;
 let offsetY = 0;
 let dragged = false;
+let touchStartX = 0;
+let touchStartY = 0;
 
 /* ---------- TOUCH HELPER ---------- */
 function getTouchPos(e) {
@@ -114,16 +116,13 @@ function createToken(type, color, col, row) {
   token.className = `token ${color}`;
   token.innerHTML = shapes[type];
 
-  // Size
   const size = type === "fighter" ? GRID * 0.75 : GRID;
   token.style.width = `${size}px`;
   token.style.height = `${size}px`;
 
-  // Initial placement (center of square)
   token.style.left = `${col * GRID + GRID / 2 - size / 2}px`;
   token.style.top = `${row * GRID + GRID / 2 - size / 2}px`;
 
-  // Initial rotation (RED fighters & bombers face down)
   let initialRotation = 0;
   if (color === "red" && (type === "fighter" || type === "bomber")) {
     initialRotation = 180;
@@ -146,9 +145,13 @@ function createToken(type, color, col, row) {
     dragged = false;
 
     const rect = token.getBoundingClientRect();
+
     if (e.touches) {
-      offsetX = e.touches[0].clientX - rect.left;
-      offsetY = e.touches[0].clientY - rect.top;
+      const t = e.touches[0];
+      touchStartX = t.clientX;
+      touchStartY = t.clientY;
+      offsetX = t.clientX - rect.left;
+      offsetY = t.clientY - rect.top;
     } else {
       offsetX = e.offsetX;
       offsetY = e.offsetY;
@@ -185,37 +188,34 @@ setupSide("red", 1);
 setupSide("blue", 18);
 
 /* ---------- GRID LABELS ---------- */
-// Left A–X
 for (let i = 0; i < 24; i++) {
-  const label = document.createElement("div");
-  label.className = "label";
-  label.textContent = String.fromCharCode(65 + i);
-  label.style.left = "10px";
-  label.style.bottom = `${40 + i * GRID + GRID / 2 - 6}px`;
-  container.appendChild(label);
+  const l = document.createElement("div");
+  l.className = "label";
+  l.textContent = String.fromCharCode(65 + i);
+  l.style.left = "10px";
+  l.style.bottom = `${40 + i * GRID + GRID / 2 - 6}px`;
+  container.appendChild(l);
 }
 
-// Bottom 1–24
 for (let i = 0; i < 24; i++) {
-  const label = document.createElement("div");
-  label.className = "label";
-  label.textContent = i + 1;
-  label.style.left = `${40 + i * GRID + GRID / 2 - 6}px`;
-  label.style.bottom = "10px";
-  container.appendChild(label);
+  const l = document.createElement("div");
+  l.className = "label";
+  l.textContent = i + 1;
+  l.style.left = `${40 + i * GRID + GRID / 2 - 6}px`;
+  l.style.bottom = "10px";
+  container.appendChild(l);
 }
 
-// Top 1–24 (above board)
 for (let i = 0; i < 24; i++) {
-  const label = document.createElement("div");
-  label.className = "label";
-  label.textContent = i + 1;
-  label.style.left = `${40 + i * GRID + GRID / 2 - 6}px`;
-  label.style.top = "0px";
-  container.appendChild(label);
+  const l = document.createElement("div");
+  l.className = "label";
+  l.textContent = i + 1;
+  l.style.left = `${40 + i * GRID + GRID / 2 - 6}px`;
+  l.style.top = "0px";
+  container.appendChild(l);
 }
 
-/* ---------- DRAG & SNAP (MOUSE + TOUCH) ---------- */
+/* ---------- DRAG & SNAP ---------- */
 document.addEventListener("mousemove", moveDrag);
 document.addEventListener("touchmove", moveDrag, { passive: false });
 
@@ -234,8 +234,20 @@ function moveDrag(e) {
 document.addEventListener("mouseup", endDrag);
 document.addEventListener("touchend", endDrag);
 
-function endDrag() {
+function endDrag(e) {
   if (!activeToken) return;
+
+  if (e.changedTouches) {
+    const t = e.changedTouches[0];
+    const dx = Math.abs(t.clientX - touchStartX);
+    const dy = Math.abs(t.clientY - touchStartY);
+
+    if (dx < 5 && dy < 5) {
+      rotateToken(activeToken);
+      activeToken = null;
+      return;
+    }
+  }
 
   const size = activeToken.offsetWidth;
   const left = parseFloat(activeToken.style.left);
@@ -254,3 +266,5 @@ function endDrag() {
 
 </body>
 </html>
+
+
